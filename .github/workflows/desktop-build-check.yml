@@ -1,0 +1,51 @@
+name: Desktop build check
+
+# Compiles the WPF app and runs the desktop unit tests on every pull request that touches
+# them. The release workflow is the only other thing that builds the app, and it only runs by
+# hand, so without this a change can reach master without ever having been compiled.
+# The private auth submodule and MapParser are optional for compiling (see BUILDING.md), and
+# the build-time secrets step only needs a .env, so placeholder values are used here.
+
+on:
+  pull_request:
+    branches:
+      - master
+    paths:
+      - "RustPlusDesktop/**"
+      - "RustPlusDesktop.Tests/**"
+      - ".github/workflows/desktop-build-check.yml"
+  push:
+    branches:
+      - "ci/**"
+  workflow_dispatch:
+
+concurrency:
+  group: desktop-build-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Create placeholder .env
+        shell: pwsh
+        run: |
+          @"
+          OVERLAY_SYNC_SECRET_HEX=00
+          OVERLAY_SYNC_BASEURL=https://example.invalid
+          SUPABASE_URL=https://example.invalid
+          SUPABASE_ANON_KEY=placeholder
+          CLOUD_API_BASEURL=https://example.invalid
+          "@ | Set-Content -Path .env
+
+      - name: Build
+        run: dotnet build RustPlusDesktop/RustPlusDesk.csproj --configuration Release -p:SkipGeneticsLabBuild=true
+
+      - name: Test
+        run: dotnet test RustPlusDesktop.Tests/RustPlusDesktop.Tests.csproj --configuration Release
